@@ -1,0 +1,6 @@
+# Ignorar variáveis de ambiente (onde fica o token)
+.env
+
+# Ignorar arquivos temporários do Python
+__pycache__/
+*.pyc
