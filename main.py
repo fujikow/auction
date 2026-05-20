@@ -15,6 +15,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 COR_TEMA = discord.Color.from_rgb(13, 148, 230) 
 COR_ERRO = discord.Color.red()
 
+# Adicionado o 'thread_id' para rastrear o tópico do leilão
 leilao_atual = {
     'ativo': False,
     'item': None,
@@ -22,10 +23,10 @@ leilao_atual = {
     'fim': None,
     'maior_lance': 0,
     'ganhador': None,
-    'canal_id': None
+    'canal_id': None,
+    'thread_id': None
 }
 
-# Dicionário com frases mais enxutas para as 3 linguagens ficarem bem no mesmo painel
 LANGUAGES = {
     'pt': {
         'in_progress': "Já existe um leilão em andamento!",
@@ -71,14 +72,12 @@ LANGUAGES = {
     }
 }
 
-# Função Mágica que junta os 3 idiomas
 def gerar_mensagem_tri(chave, **kwargs):
     pt = f"🇧🇷 {LANGUAGES['pt'][chave].format(**kwargs)}"
     en = f"🇺🇸 {LANGUAGES['en'][chave].format(**kwargs)}"
     vi = f"🇻🇳 {LANGUAGES['vi'][chave].format(**kwargs)}"
     return f"{pt}\n\n{en}\n\n{vi}"
 
-# IDs dos Organizadores
 CARGOS_ORG = (1488536207091830835, 1487999133351542825, 1488536371537907752)
 
 @bot.event
@@ -87,7 +86,6 @@ async def on_ready():
     if not verificar_leilao.is_running():
         verificar_leilao.start()
 
-# --- COMANDO: INICIAR ---
 @bot.command(name='iniciar_leilao', aliases=['start_auction', 'batdaudaugia'])
 @commands.has_any_role(*CARGOS_ORG) 
 async def iniciar_leilao(ctx, item: str, qtd_participantes: int = 0):
@@ -101,6 +99,16 @@ async def iniciar_leilao(ctx, item: str, qtd_participantes: int = 0):
         await ctx.send(gerar_mensagem_tri('need_participants'))
         return
 
+    embed = discord.Embed(
+        title="🎉 LEILÃO INICIADO | AUCTION STARTED | BẮT ĐẦU ĐẤU GIÁ 🎉",
+        description=gerar_mensagem_tri('started', item=item, qtd=qtd_participantes),
+        color=COR_TEMA
+    )
+    
+    # Envia a mensagem no canal principal e cria um tópico a partir dela
+    mensagem_painel = await ctx.send(embed=embed)
+    topico = await mensagem_painel.create_thread(name=f"🔨 Leilão: {item}", auto_archive_duration=1440)
+
     leilao_atual.update({
         'ativo': True,
         'item': item,
@@ -108,22 +116,15 @@ async def iniciar_leilao(ctx, item: str, qtd_participantes: int = 0):
         'fim': datetime.now() + timedelta(hours=24),
         'maior_lance': 0,
         'ganhador': None,
-        'canal_id': ctx.channel.id
+        'canal_id': ctx.channel.id,
+        'thread_id': topico.id
     })
-    
-    embed = discord.Embed(
-        title="🎉 LEILÃO INICIADO | AUCTION STARTED | BẮT ĐẦU ĐẤU GIÁ 🎉",
-        description=gerar_mensagem_tri('started', item=item, qtd=qtd_participantes),
-        color=COR_TEMA
-    )
-    await ctx.send(embed=embed)
 
 @iniciar_leilao.error
 async def iniciar_leilao_error(ctx, error):
     if isinstance(error, commands.MissingAnyRole):
         await ctx.send("❌ Acesso Negado / Access Denied / Truy cập bị từ chối")
 
-# --- COMANDO: CANCELAR ---
 @bot.command(name='cancelar_leilao', aliases=['cancel_auction', 'huydaugia'])
 @commands.has_any_role(*CARGOS_ORG) 
 async def cancelar_leilao(ctx):
@@ -134,6 +135,7 @@ async def cancelar_leilao(ctx):
         return
 
     nome_item = leilao_atual['item']
+    id_topico = leilao_atual['thread_id']
     leilao_atual['ativo'] = False
     
     embed = discord.Embed(
@@ -141,14 +143,15 @@ async def cancelar_leilao(ctx):
         description=gerar_mensagem_tri('cancelled', item=nome_item),
         color=COR_ERRO
     )
+    
+    # Envia o cancelamento no tópico e tranca ele
+    topico = bot.get_channel(id_topico)
+    if topico:
+        await topico.send(embed=embed)
+        await topico.edit(locked=True, archived=True)
+    
     await ctx.send(embed=embed)
 
-@cancelar_leilao.error
-async def cancelar_leilao_error(ctx, error):
-    if isinstance(error, commands.MissingAnyRole):
-        await ctx.send("❌ Acesso Negado / Access Denied / Truy cập bị từ chối")
-
-# --- COMANDO: TEMPO RESTANTE ---
 @bot.command(name='tempo', aliases=['timeleft', 'thoigian'])
 async def tempo_restante(ctx):
     if not leilao_atual['ativo']:
@@ -161,13 +164,20 @@ async def tempo_restante(ctx):
 
     await ctx.send(gerar_mensagem_tri('timeleft', horas=horas, minutos=minutos))
 
-# --- COMANDO: LANCE ---
 @bot.command(name='lance', aliases=['bid', 'datcuoc'])
 async def lance(ctx, *, valor_str: str):
     global leilao_atual
     
     if not leilao_atual['ativo']:
         await ctx.send(gerar_mensagem_tri('no_active'))
+        return
+
+    # Trava de segurança: Verifica se o comando foi digitado dentro do tópico correto
+    if ctx.channel.id != leilao_atual['thread_id']:
+        aviso = "⚠️ 🇧🇷 Lances apenas no tópico oficial!\n🇺🇸 Bids only in the official thread!\n🇻🇳 Chỉ đặt cược trong chủ đề chính thức!"
+        # Apaga a mensagem errada do usuário e manda o aviso temporário
+        await ctx.message.delete()
+        await ctx.send(aviso, delete_after=10)
         return
 
     valor_limpo = valor_str.lower().replace(" ", "")
@@ -181,7 +191,6 @@ async def lance(ctx, *, valor_str: str):
         await ctx.send(f"{ctx.author.mention}\n" + gerar_mensagem_tri('invalid_value'))
         return
 
-    # Regra 1%
     lance_minimo = 1 if leilao_atual['maior_lance'] == 0 else leilao_atual['maior_lance'] * 1.01
 
     if valor < lance_minimo:
@@ -206,18 +215,19 @@ async def lance(ctx, *, valor_str: str):
 
     await ctx.send(gerar_mensagem_tri('bid_accepted', author=ctx.author.mention, amount=valor_fmt, item=leilao_atual['item']))
 
-# --- ROTINA: VERIFICA FIM ---
 @tasks.loop(seconds=10)
 async def verificar_leilao():
     global leilao_atual
     if not leilao_atual['ativo'] or datetime.now() < leilao_atual['fim']:
         return
 
-    canal = bot.get_channel(leilao_atual['canal_id'])
+    topico = bot.get_channel(leilao_atual['thread_id'])
     leilao_atual['ativo'] = False
     
     if leilao_atual['ganhador'] is None:
-        await canal.send(gerar_mensagem_tri('no_bids', item=leilao_atual['item']))
+        if topico:
+            await topico.send(gerar_mensagem_tri('no_bids', item=leilao_atual['item']))
+            await topico.edit(locked=True, archived=True)
         return
 
     valor_total = leilao_atual['maior_lance']
@@ -237,7 +247,11 @@ async def verificar_leilao():
         ),
         color=COR_TEMA
     )
-    await canal.send(embed=embed)
+    
+    if topico:
+        await topico.send(embed=embed)
+        # Tranca o tópico para ninguém mais falar lá dentro após o fim
+        await topico.edit(locked=True, archived=True)
 
 if __name__ == "__main__":
     keep_alive()
