@@ -15,7 +15,6 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 COR_TEMA = discord.Color.from_rgb(13, 148, 230) 
 COR_ERRO = discord.Color.red()
 
-# Adicionado o 'thread_id' para rastrear o tópico do leilão
 leilao_atual = {
     'ativo': False,
     'item': None,
@@ -37,7 +36,7 @@ LANGUAGES = {
         'bid_accepted': "🔨 {author} apostou **{amount}** em **{item}**!\n⏳ *Relógio reiniciado para 24h!*",
         'outbid_dm': "⚠️ Você foi ultrapassado em **{item}**! Novo lance: **{new_amount}**.",
         'no_bids': "O leilão de **{item}** encerrou sem lances. 😢",
-        'ended': "**Item:** {item} | **Ganhador:** {winner} ({amount})\n💰 {qtd} membros recebem **{split_amount}** cada.",
+        'ended': "**Item:** {item} | **Ganhador:** {winner} ({amount})\n📉 *Taxa do Jogo (1%): -{tax}*\n💰 {qtd} membros recebem **{split_amount}** cada.",
         'invalid_value': "Valor inválido. Ex: `500k`",
         'cancelled': "🛑 O leilão de **{item}** foi cancelado.",
         'timeleft': "⏳ Faltam **{horas}h {minutos}m** para o fim do leilão."
@@ -51,7 +50,7 @@ LANGUAGES = {
         'bid_accepted': "🔨 {author} bid **{amount}** for **{item}**!\n⏳ *Clock reset to 24h!*",
         'outbid_dm': "⚠️ You've been outbid on **{item}**! New bid: **{new_amount}**.",
         'no_bids': "Auction for **{item}** ended with no bids. 😢",
-        'ended': "**Item:** {item} | **Winner:** {winner} ({amount})\n💰 {qtd} members receive **{split_amount}** each.",
+        'ended': "**Item:** {item} | **Winner:** {winner} ({amount})\n📉 *Game Tax (1%): -{tax}*\n💰 {qtd} members receive **{split_amount}** each.",
         'invalid_value': "Invalid amount. Ex: `500k`",
         'cancelled': "🛑 Auction for **{item}** was cancelled.",
         'timeleft': "⏳ **{horas}h {minutos}m** left until auction ends."
@@ -65,7 +64,7 @@ LANGUAGES = {
         'bid_accepted': "🔨 {author} đặt **{amount}** cho **{item}**!\n⏳ *Gia hạn thành 24h!*",
         'outbid_dm': "⚠️ Bạn đã bị vượt giá cho **{item}**! Giá mới: **{new_amount}**.",
         'no_bids': "Đấu giá **{item}** kết thúc không có lượt đặt. 😢",
-        'ended': "**Vật phẩm:** {item} | **Thắng:** {winner} ({amount})\n💰 {qtd} người nhận **{split_amount}** mỗi người.",
+        'ended': "**Vật phẩm:** {item} | **Thắng:** {winner} ({amount})\n📉 *Thuế (1%): -{tax}*\n💰 {qtd} người nhận **{split_amount}** mỗi người.",
         'invalid_value': "Giá trị không hợp lệ. VD: `500k`",
         'cancelled': "🛑 Đấu giá cho **{item}** đã bị hủy.",
         'timeleft': "⏳ Còn lại **{horas}h {minutos}m** cho đến khi kết thúc."
@@ -105,7 +104,6 @@ async def iniciar_leilao(ctx, item: str, qtd_participantes: int = 0):
         color=COR_TEMA
     )
     
-    # Envia a mensagem no canal principal e cria um tópico a partir dela
     mensagem_painel = await ctx.send(embed=embed)
     topico = await mensagem_painel.create_thread(name=f"🔨 Leilão: {item}", auto_archive_duration=1440)
 
@@ -144,7 +142,6 @@ async def cancelar_leilao(ctx):
         color=COR_ERRO
     )
     
-    # Envia o cancelamento no tópico e tranca ele
     topico = bot.get_channel(id_topico)
     if topico:
         await topico.send(embed=embed)
@@ -172,10 +169,8 @@ async def lance(ctx, *, valor_str: str):
         await ctx.send(gerar_mensagem_tri('no_active'))
         return
 
-    # Trava de segurança: Verifica se o comando foi digitado dentro do tópico correto
     if ctx.channel.id != leilao_atual['thread_id']:
         aviso = "⚠️ 🇧🇷 Lances apenas no tópico oficial!\n🇺🇸 Bids only in the official thread!\n🇻🇳 Chỉ đặt cược trong chủ đề chính thức!"
-        # Apaga a mensagem errada do usuário e manda o aviso temporário
         await ctx.message.delete()
         await ctx.send(aviso, delete_after=10)
         return
@@ -230,10 +225,14 @@ async def verificar_leilao():
             await topico.edit(locked=True, archived=True)
         return
 
+    # === CÁLCULO ATUALIZADO DA TAXA DE 1% ===
     valor_total = leilao_atual['maior_lance']
-    parte_por_pessoa = valor_total / leilao_atual['qtd_participantes']
+    taxa_jogo = valor_total * 0.01
+    valor_liquido = valor_total - taxa_jogo
+    parte_por_pessoa = valor_liquido / leilao_atual['qtd_participantes']
 
     valor_total_fmt = f"{valor_total:,.0f}".replace(",", ".")
+    taxa_fmt = f"{taxa_jogo:,.0f}".replace(",", ".")
     parte_pessoa_fmt = f"{parte_por_pessoa:,.0f}".replace(",", ".")
 
     embed = discord.Embed(
@@ -242,6 +241,7 @@ async def verificar_leilao():
             item=leilao_atual['item'], 
             winner=leilao_atual['ganhador'].mention, 
             amount=valor_total_fmt,
+            tax=taxa_fmt,
             qtd=leilao_atual['qtd_participantes'],
             split_amount=parte_pessoa_fmt
         ),
@@ -250,7 +250,6 @@ async def verificar_leilao():
     
     if topico:
         await topico.send(embed=embed)
-        # Tranca o tópico para ninguém mais falar lá dentro após o fim
         await topico.edit(locked=True, archived=True)
 
 if __name__ == "__main__":
