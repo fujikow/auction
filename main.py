@@ -40,7 +40,8 @@ LANGUAGES = {
         'invalid_value': "Valor inválido. Ex: `500k`",
         'cancelled': "🛑 O leilão de **{item}** foi cancelado.",
         'current_bid': "🏆 Maior lance: **{amount}** por {winner}\n⏳ Faltam **{horas}h {minutos}m** para o fim.",
-        'no_bids_yet': "Nenhum lance feito para **{item}** ainda."
+        'no_bids_yet': "Nenhum lance feito para **{item}** ainda.",
+        'recovered': "✅ **Leilão Recuperado!**\n**Item:** {item} | **Divisão:** {qtd} membros\n🏆 **Ganhador atual:** {winner} ({amount})\n⏳ *Relógio reiniciado para 24h!*"
     },
     'en': {
         'in_progress': "There's already an active auction!",
@@ -55,7 +56,8 @@ LANGUAGES = {
         'invalid_value': "Invalid amount. Ex: `500k`",
         'cancelled': "🛑 Auction for **{item}** was cancelled.",
         'current_bid': "🏆 Highest bid: **{amount}** by {winner}\n⏳ **{horas}h {minutos}m** left.",
-        'no_bids_yet': "No bids placed for **{item}** yet."
+        'no_bids_yet': "No bids placed for **{item}** yet.",
+        'recovered': "✅ **Auction Recovered!**\n**Item:** {item} | **Split:** {qtd} members\n🏆 **Current winner:** {winner} ({amount})\n⏳ *Clock reset to 24h!*"
     },
     'es': {
         'in_progress': "¡Ya hay una subasta en curso!",
@@ -70,7 +72,8 @@ LANGUAGES = {
         'invalid_value': "Valor inválido. Ej: `500k`",
         'cancelled': "🛑 La subasta de **{item}** ha sido cancelada.",
         'current_bid': "🏆 Puja más alta: **{amount}** por {winner}\n⏳ Faltan **{horas}h {minutos}m** para el fin.",
-        'no_bids_yet': "Aún no hay pujas para **{item}**."
+        'no_bids_yet': "Aún no hay pujas para **{item}**.",
+        'recovered': "✅ **¡Subasta Recuperada!**\n**Objeto:** {item} | **División:** {qtd} miembros\n🏆 **Ganador actual:** {winner} ({amount})\n⏳ *¡Reloj reiniciado a 24h!*"
     },
     'vi': {
         'in_progress': "Đang có một phiên đấu giá diễn ra!",
@@ -85,7 +88,8 @@ LANGUAGES = {
         'invalid_value': "Giá trị không hợp lệ. VD: `500k`",
         'cancelled': "🛑 Đấu giá cho **{item}** đã bị hủy.",
         'current_bid': "🏆 Giá cao nhất: **{amount}** bởi {winner}\n⏳ Còn lại **{horas}h {minutos}m**.",
-        'no_bids_yet': "Chưa có lượt đặt cược nào cho **{item}**."
+        'no_bids_yet': "Chưa có lượt đặt cược nào cho **{item}**.",
+        'recovered': "✅ **Đã Khôi Phục Đấu Giá!**\n**Vật phẩm:** {item} | **Chia cho:** {qtd} người\n🏆 **Thắng hiện tại:** {winner} ({amount})\n⏳ *Gia hạn thành 24h!*"
     }
 }
 
@@ -127,6 +131,11 @@ async def iniciar_leilao(ctx, item: str, qtd_participantes: int = 0):
         'ganhador': None, 'canal_id': ctx.channel.id, 'thread_id': topico.id
     })
 
+@iniciar_leilao.error
+async def iniciar_leilao_error(ctx, error):
+    if isinstance(error, commands.MissingAnyRole):
+        await ctx.send("❌ Acesso Negado / Access Denied / Acceso Denegado / Truy cập bị từ chối")
+
 @bot.command(name='cancelar_leilao', aliases=['cancel_auction', 'cancelar_subasta', 'huydaugia'])
 @commands.has_any_role(*CARGOS_ORG) 
 async def cancelar_leilao(ctx):
@@ -148,6 +157,61 @@ async def cancelar_leilao(ctx):
         await topico.edit(locked=True, archived=True)
     await ctx.send(embed=embed)
 
+@cancelar_leilao.error
+async def cancelar_leilao_error(ctx, error):
+    if isinstance(error, commands.MissingAnyRole):
+        await ctx.send("❌ Acesso Negado / Access Denied / Acceso Denegado / Truy cập bị từ chối")
+
+# === COMANDO: RECUPERAR LEILÃO (AGORA INCLUÍDO) ===
+@bot.command(name='recuperar_leilao', aliases=['recover_auction', 'recuperar_subasta', 'khoiphuc'])
+@commands.has_any_role(*CARGOS_ORG)
+async def recuperar_leilao(ctx, item: str, qtd_participantes: int, valor_str: str, ganhador: discord.Member):
+    global leilao_atual
+
+    if leilao_atual['ativo']:
+        await ctx.send(gerar_mensagem_multi('in_progress'))
+        return
+
+    # Certifica-se de que o organizador está rodando o comando dentro do tópico onde o leilão acontecia
+    if not isinstance(ctx.channel, discord.Thread):
+        await ctx.send("⚠️ Erro: Este comando deve ser executado **dentro** do tópico/thread original do leilão.")
+        return
+
+    valor_limpo = valor_str.lower().replace(" ", "")
+    multiplicador = 1000 if valor_limpo.endswith('k') else 1
+    if multiplicador == 1000:
+        valor_limpo = valor_limpo[:-1]
+        
+    try:
+        valor = float(valor_limpo) * multiplicador
+    except ValueError:
+        await ctx.send(f"{ctx.author.mention}\n" + gerar_mensagem_multi('invalid_value'))
+        return
+
+    leilao_atual.update({
+        'ativo': True,
+        'item': item,
+        'qtd_participantes': qtd_participantes,
+        'fim': datetime.now() + timedelta(hours=24),
+        'maior_lance': valor,
+        'ganhador': ganhador,
+        'canal_id': ctx.channel.parent_id, 
+        'thread_id': ctx.channel.id
+    })
+
+    valor_fmt = f"{valor:,.0f}".replace(",", ".")
+    embed = discord.Embed(
+        title="🛠️ LEILÃO RECUPERADO | RECOVERED | RECUPERADA | KHÔI PHỤC",
+        description=gerar_mensagem_multi('recovered', item=item, qtd=qtd_participantes, winner=ganhador.mention, amount=valor_fmt),
+        color=discord.Color.green()
+    )
+    await ctx.send(embed=embed)
+
+@recuperar_leilao.error
+async def recuperar_leilao_error(ctx, error):
+    if isinstance(error, commands.MissingAnyRole):
+        await ctx.send("❌ Acesso Negado / Access Denied / Acceso Denegado / Truy cập bị từ chối")
+
 @bot.command(name='atual', aliases=['current', 'actual', 'hientai'])
 async def lance_atual(ctx):
     if not leilao_atual['ativo']:
@@ -157,7 +221,6 @@ async def lance_atual(ctx):
         await ctx.send(gerar_mensagem_multi('no_bids_yet', item=leilao_atual['item']))
         return
 
-    # Cálculo do Tempo Restante para exibir no !atual
     restante = leilao_atual['fim'] - datetime.now()
     horas, resto = divmod(int(restante.total_seconds()), 3600)
     minutos, _ = divmod(resto, 60)
