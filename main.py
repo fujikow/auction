@@ -39,7 +39,9 @@ LANGUAGES = {
         'ended': "**Item:** {item} | **Ganhador:** {winner} ({amount})\n📉 *Taxa do Jogo (1%): -{tax}*\n💰 {qtd} membros recebem **{split_amount}** cada.",
         'invalid_value': "Valor inválido. Ex: `500k`",
         'cancelled': "🛑 O leilão de **{item}** foi cancelado.",
-        'timeleft': "⏳ Faltam **{horas}h {minutos}m** para o fim do leilão."
+        'timeleft': "⏳ Faltam **{horas}h {minutos}m** para o fim do leilão.",
+        'current_bid': "🏆 Maior lance atual: **{amount}** por {winner}",
+        'no_bids_yet': "Nenhum lance foi feito ainda para **{item}**."
     },
     'en': {
         'in_progress': "There's already an active auction!",
@@ -53,7 +55,25 @@ LANGUAGES = {
         'ended': "**Item:** {item} | **Winner:** {winner} ({amount})\n📉 *Game Tax (1%): -{tax}*\n💰 {qtd} members receive **{split_amount}** each.",
         'invalid_value': "Invalid amount. Ex: `500k`",
         'cancelled': "🛑 Auction for **{item}** was cancelled.",
-        'timeleft': "⏳ **{horas}h {minutos}m** left until auction ends."
+        'timeleft': "⏳ **{horas}h {minutos}m** left until auction ends.",
+        'current_bid': "🏆 Highest bid: **{amount}** by {winner}",
+        'no_bids_yet': "No bids have been placed yet for **{item}**."
+    },
+    'es': {
+        'in_progress': "¡Ya hay una subasta en curso!",
+        'need_participants': "¡Indica la división! Ej: `!iniciar_leilao \"Objeto\" 5`",
+        'started': "**Objeto:** {item} | **División:** {qtd} miembros\n**Fin:** 24h después de la última puja. Usa `!puja <valor>`",
+        'no_active': "No hay ninguna subasta activa en este momento.",
+        'higher_bid': "{author}, puja mínima: **{min_bid}** (+1% sobre {current_bid}).",
+        'bid_accepted': "🔨 ¡{author} ha pujado **{amount}** por **{item}**!\n⏳ *¡Reloj reiniciado a 24h!*",
+        'outbid_dm': "⚠️ ¡Te han superado en **{item}**! Nueva puja: **{new_amount}**.",
+        'no_bids': "La subasta de **{item}** terminó sin pujas. 😢",
+        'ended': "**Objeto:** {item} | **Ganador:** {winner} ({amount})\n📉 *Tasa del Juego (1%): -{tax}*\n💰 {qtd} miembros reciben **{split_amount}** cada uno.",
+        'invalid_value': "Valor inválido. Ej: `500k`",
+        'cancelled': "🛑 La subasta de **{item}** ha sido cancelada.",
+        'timeleft': "⏳ Faltan **{horas}h {minutos}m** para el fin de la subasta.",
+        'current_bid': "🏆 Puja más alta: **{amount}** por {winner}",
+        'no_bids_yet': "Aún no hay pujas para **{item}**."
     },
     'vi': {
         'in_progress': "Đang có một phiên đấu giá diễn ra!",
@@ -67,15 +87,18 @@ LANGUAGES = {
         'ended': "**Vật phẩm:** {item} | **Thắng:** {winner} ({amount})\n📉 *Thuế (1%): -{tax}*\n💰 {qtd} người nhận **{split_amount}** mỗi người.",
         'invalid_value': "Giá trị không hợp lệ. VD: `500k`",
         'cancelled': "🛑 Đấu giá cho **{item}** đã bị hủy.",
-        'timeleft': "⏳ Còn lại **{horas}h {minutos}m** cho đến khi kết thúc."
+        'timeleft': "⏳ Còn lại **{horas}h {minutos}m** cho đến khi kết thúc.",
+        'current_bid': "🏆 Giá cao nhất: **{amount}** bởi {winner}",
+        'no_bids_yet': "Chưa có lượt đặt cược nào cho **{item}**."
     }
 }
 
-def gerar_mensagem_tri(chave, **kwargs):
+def gerar_mensagem_multi(chave, **kwargs):
     pt = f"🇧🇷 {LANGUAGES['pt'][chave].format(**kwargs)}"
     en = f"🇺🇸 {LANGUAGES['en'][chave].format(**kwargs)}"
+    es = f"🇪🇸 {LANGUAGES['es'][chave].format(**kwargs)}"
     vi = f"🇻🇳 {LANGUAGES['vi'][chave].format(**kwargs)}"
-    return f"{pt}\n\n{en}\n\n{vi}"
+    return f"{pt}\n\n{en}\n\n{es}\n\n{vi}"
 
 CARGOS_ORG = (1488536207091830835, 1487999133351542825, 1488536371537907752)
 
@@ -85,22 +108,22 @@ async def on_ready():
     if not verificar_leilao.is_running():
         verificar_leilao.start()
 
-@bot.command(name='iniciar_leilao', aliases=['start_auction', 'batdaudaugia'])
+@bot.command(name='iniciar_leilao', aliases=['start_auction', 'iniciar_subasta', 'batdaudaugia'])
 @commands.has_any_role(*CARGOS_ORG) 
 async def iniciar_leilao(ctx, item: str, qtd_participantes: int = 0):
     global leilao_atual
     
     if leilao_atual['ativo']:
-        await ctx.send(gerar_mensagem_tri('in_progress'))
+        await ctx.send(gerar_mensagem_multi('in_progress'))
         return
         
     if qtd_participantes <= 0:
-        await ctx.send(gerar_mensagem_tri('need_participants'))
+        await ctx.send(gerar_mensagem_multi('need_participants'))
         return
 
     embed = discord.Embed(
-        title="🎉 LEILÃO INICIADO | AUCTION STARTED | BẮT ĐẦU ĐẤU GIÁ 🎉",
-        description=gerar_mensagem_tri('started', item=item, qtd=qtd_participantes),
+        title="🎉 LEILÃO INICIADO | AUCTION STARTED | SUBASTA INICIADA | BẮT ĐẦU 🎉",
+        description=gerar_mensagem_multi('started', item=item, qtd=qtd_participantes),
         color=COR_TEMA
     )
     
@@ -121,15 +144,15 @@ async def iniciar_leilao(ctx, item: str, qtd_participantes: int = 0):
 @iniciar_leilao.error
 async def iniciar_leilao_error(ctx, error):
     if isinstance(error, commands.MissingAnyRole):
-        await ctx.send("❌ Acesso Negado / Access Denied / Truy cập bị từ chối")
+        await ctx.send("❌ Acesso Negado / Access Denied / Acceso Denegado / Truy cập bị từ chối")
 
-@bot.command(name='cancelar_leilao', aliases=['cancel_auction', 'huydaugia'])
+@bot.command(name='cancelar_leilao', aliases=['cancel_auction', 'cancelar_subasta', 'huydaugia'])
 @commands.has_any_role(*CARGOS_ORG) 
 async def cancelar_leilao(ctx):
     global leilao_atual
     
     if not leilao_atual['ativo']:
-        await ctx.send(gerar_mensagem_tri('no_active'))
+        await ctx.send(gerar_mensagem_multi('no_active'))
         return
 
     nome_item = leilao_atual['item']
@@ -137,8 +160,8 @@ async def cancelar_leilao(ctx):
     leilao_atual['ativo'] = False
     
     embed = discord.Embed(
-        title="🛑 LEILÃO CANCELADO | CANCELLED | HỦY BỎ",
-        description=gerar_mensagem_tri('cancelled', item=nome_item),
+        title="🛑 LEILÃO CANCELADO | CANCELLED | CANCELADA | HỦY BỎ",
+        description=gerar_mensagem_multi('cancelled', item=nome_item),
         color=COR_ERRO
     )
     
@@ -149,28 +172,42 @@ async def cancelar_leilao(ctx):
     
     await ctx.send(embed=embed)
 
-@bot.command(name='tempo', aliases=['timeleft', 'thoigian'])
+@bot.command(name='tempo', aliases=['timeleft', 'tiempo', 'thoigian'])
 async def tempo_restante(ctx):
     if not leilao_atual['ativo']:
-        await ctx.send(gerar_mensagem_tri('no_active'))
+        await ctx.send(gerar_mensagem_multi('no_active'))
         return
 
     restante = leilao_atual['fim'] - datetime.now()
     horas, resto = divmod(int(restante.total_seconds()), 3600)
     minutos, _ = divmod(resto, 60)
 
-    await ctx.send(gerar_mensagem_tri('timeleft', horas=horas, minutos=minutos))
+    await ctx.send(gerar_mensagem_multi('timeleft', horas=horas, minutos=minutos))
 
-@bot.command(name='lance', aliases=['bid', 'datcuoc'])
+# === NOVO COMANDO: LANCE ATUAL ===
+@bot.command(name='atual', aliases=['current', 'actual', 'hientai'])
+async def lance_atual(ctx):
+    if not leilao_atual['ativo']:
+        await ctx.send(gerar_mensagem_multi('no_active'))
+        return
+
+    if leilao_atual['ganhador'] is None:
+        await ctx.send(gerar_mensagem_multi('no_bids_yet', item=leilao_atual['item']))
+        return
+
+    valor_fmt = f"{leilao_atual['maior_lance']:,.0f}".replace(",", ".")
+    await ctx.send(gerar_mensagem_multi('current_bid', amount=valor_fmt, winner=leilao_atual['ganhador'].mention))
+
+@bot.command(name='lance', aliases=['bid', 'puja', 'datcuoc'])
 async def lance(ctx, *, valor_str: str):
     global leilao_atual
     
     if not leilao_atual['ativo']:
-        await ctx.send(gerar_mensagem_tri('no_active'))
+        await ctx.send(gerar_mensagem_multi('no_active'))
         return
 
     if ctx.channel.id != leilao_atual['thread_id']:
-        aviso = "⚠️ 🇧🇷 Lances apenas no tópico oficial!\n🇺🇸 Bids only in the official thread!\n🇻🇳 Chỉ đặt cược trong chủ đề chính thức!"
+        aviso = "⚠️ 🇧🇷 Lances apenas no tópico oficial!\n🇺🇸 Bids only in the official thread!\n🇪🇸 ¡Pujas solo en el hilo oficial!\n🇻🇳 Chỉ đặt cược trong chủ đề chính thức!"
         await ctx.message.delete()
         await ctx.send(aviso, delete_after=10)
         return
@@ -183,7 +220,7 @@ async def lance(ctx, *, valor_str: str):
     try:
         valor = float(valor_limpo) * multiplicador
     except ValueError:
-        await ctx.send(f"{ctx.author.mention}\n" + gerar_mensagem_tri('invalid_value'))
+        await ctx.send(f"{ctx.author.mention}\n" + gerar_mensagem_multi('invalid_value'))
         return
 
     lance_minimo = 1 if leilao_atual['maior_lance'] == 0 else leilao_atual['maior_lance'] * 1.01
@@ -191,7 +228,7 @@ async def lance(ctx, *, valor_str: str):
     if valor < lance_minimo:
         lance_atual_fmt = f"{leilao_atual['maior_lance']:,.0f}".replace(",", ".")
         lance_minimo_fmt = f"{lance_minimo:,.0f}".replace(",", ".")
-        await ctx.send(gerar_mensagem_tri('higher_bid', author=ctx.author.mention, min_bid=lance_minimo_fmt, current_bid=lance_atual_fmt))
+        await ctx.send(gerar_mensagem_multi('higher_bid', author=ctx.author.mention, min_bid=lance_minimo_fmt, current_bid=lance_atual_fmt))
         return
 
     antigo_ganhador = leilao_atual['ganhador']
@@ -203,12 +240,12 @@ async def lance(ctx, *, valor_str: str):
     
     if antigo_ganhador is not None and antigo_ganhador != ctx.author:
         try:
-            texto_dm = gerar_mensagem_tri('outbid_dm', item=leilao_atual['item'], new_amount=valor_fmt)
+            texto_dm = gerar_mensagem_multi('outbid_dm', item=leilao_atual['item'], new_amount=valor_fmt)
             await antigo_ganhador.send(texto_dm)
         except discord.Forbidden:
             pass 
 
-    await ctx.send(gerar_mensagem_tri('bid_accepted', author=ctx.author.mention, amount=valor_fmt, item=leilao_atual['item']))
+    await ctx.send(gerar_mensagem_multi('bid_accepted', author=ctx.author.mention, amount=valor_fmt, item=leilao_atual['item']))
 
 @tasks.loop(seconds=10)
 async def verificar_leilao():
@@ -221,11 +258,10 @@ async def verificar_leilao():
     
     if leilao_atual['ganhador'] is None:
         if topico:
-            await topico.send(gerar_mensagem_tri('no_bids', item=leilao_atual['item']))
+            await topico.send(gerar_mensagem_multi('no_bids', item=leilao_atual['item']))
             await topico.edit(locked=True, archived=True)
         return
 
-    # === CÁLCULO ATUALIZADO DA TAXA DE 1% ===
     valor_total = leilao_atual['maior_lance']
     taxa_jogo = valor_total * 0.01
     valor_liquido = valor_total - taxa_jogo
@@ -236,8 +272,8 @@ async def verificar_leilao():
     parte_pessoa_fmt = f"{parte_por_pessoa:,.0f}".replace(",", ".")
 
     embed = discord.Embed(
-        title="🎊 LEILÃO ENCERRADO | AUCTION ENDED | KẾT THÚC ĐẤU GIÁ 🎊",
-        description=gerar_mensagem_tri('ended', 
+        title="🎊 LEILÃO ENCERRADO | AUCTION ENDED | SUBASTA TERMINADA | KẾT THÚC 🎊",
+        description=gerar_mensagem_multi('ended', 
             item=leilao_atual['item'], 
             winner=leilao_atual['ganhador'].mention, 
             amount=valor_total_fmt,
